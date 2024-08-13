@@ -156,6 +156,8 @@ impl Client {
 
     /// Deploys a single resource to Zeebe
     ///
+    /// # Examples
+    ///
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -175,6 +177,8 @@ impl Client {
 
     /// Delete a single resource from Zeebe
     ///
+    /// # Examples
+    ///
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -182,7 +186,7 @@ impl Client {
     ///
     /// let removed = client
     ///    .delete_resource()
-    ///    .with_resource_name("my-name")
+    ///    .with_resource_key(123)
     ///    .send()
     ///    .await?;
     /// # Ok(())
