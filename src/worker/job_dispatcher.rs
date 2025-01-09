@@ -35,11 +35,12 @@ pub(crate) async fn run(
                 task.job_client.current_job_key = Some(key);
                 task.job_client.current_job_extensions = Some(task.extensions.clone());
 
-                tracing::trace!(worker = ?task.worker, ?key, job = ?task.job, "dispatching job");
+                tracing::debug!(worker = ?task.worker, ?key, job = ?task.job, "dispatching job");
                 task.handler.call(task.job_client, task.job).await;
 
-                tracing::trace!(worker = ?task.worker, ?key, "job completed");
+                tracing::debug!(worker = ?task.worker, ?key, "sending JobFinished");
                 let _ = task.poll_queue.send(PollMessage::JobFinished).await;
+                tracing::debug!(worker = ?task.worker, ?key, "sent JobFinished");
             }
         })
         .await

@@ -72,38 +72,46 @@ impl JobPoller {
                         // Resource exhausted is normal part of backpressure, poller will retry
                         if err.message() != TIMEOUT_ERROR && err.code() != Code::ResourceExhausted {
                             tracing::error!(?worker, ?err, "Failed to activate jobs for worker");
+                        } else {
+                            tracing::debug!(?worker, ?err, "Failed to activate jobs for worker");
                         }
                     })
                     .await
                 {
+                    tracing::debug!(?worker, "Activated new jobs");
                     let mut total_jobs = 0;
                     while let Some(Ok(batch)) = stream.next().await {
                         total_jobs += batch.jobs.len() as u32;
                         for job in batch.jobs {
+                            tracing::debug!(?worker, ?job, "Sending job to queue");
                             let _ = job_queue
                                 .send(Job::new(job))
                                 .inspect_err(|err| {
                                     tracing::error!(?worker, ?err, "job queue send failed");
                                 })
                                 .await;
+                            tracing::debug!(?worker, "Sent job to queue");
                         }
                     }
-                    tracing::trace!(?worker, "received {} new job(s)", total_jobs);
+                    tracing::debug!(?worker, "received {} new job(s)", total_jobs);
                     let _ = poll_queue
                         .send(PollMessage::JobsArrived(total_jobs))
                         .inspect_err(|err| {
                             tracing::error!(?worker, ?err, "poll queue send failed");
                         })
                         .await;
+                    tracing::debug!(?worker, "Sent jobs arrived");
                 }
             })
             .then(|_| async move {
+                tracing::debug!(?retry_worker, "Sending fetch jobs complete");
                 let _ = retry_queue
                     .send(PollMessage::FetchJobsComplete)
                     .inspect_err(|err| {
                         tracing::error!(?retry_worker, ?err, "retry queue send failed");
                     })
                     .await;
+                tracing::debug!(?retry_worker, "Sent fetch jobs complete");
             }),
         );
     }
@@ -118,24 +126,34 @@ impl Future for JobPoller {
                 // new work arrived
                 Some(PollMessage::JobsArrived(new_job_count)) => {
                     self.remaining = self.remaining.saturating_add(new_job_count);
+                    tracing::debug!(?new_job_count, ?self.remaining, "Got JobsArrived");
                 }
                 // a job was finished by a worker
                 Some(PollMessage::JobFinished) => {
                     self.remaining = self.remaining.saturating_sub(1);
+                    tracing::debug!(?self.remaining, "Got JobFinished");
                 }
                 // the poll interval elapsed and we are ready for more work
                 Some(PollMessage::FetchJobs) if self.should_activate_jobs() => {
+                    tracing::debug!("Got FetchJobs message- activating jobs");
                     self.request_in_progress = true;
                     self.activate_jobs();
+                    tracing::debug!("Finished activating jobs");
                 }
                 // ignore poll interval if not ready for more work
-                Some(PollMessage::FetchJobs) => {}
+                Some(PollMessage::FetchJobs) => {
+                    tracing::debug!("Got FetchJobs message- ignoring");
+                }
                 // fetching jobs either completed or failed, either way ready to fetch again.
                 Some(PollMessage::FetchJobsComplete) => {
+                    tracing::debug!("Got FetchJobsComplete");
                     self.request_in_progress = false;
                 }
                 // poller should stop
-                None => return Poll::Ready(()),
+                None => {
+                    tracing::debug!("Got None");
+                    return Poll::Ready(());
+                }
             }
         }
     }
